@@ -76,6 +76,7 @@ This plots show that the overall trend is that going up or Retail sales are incr
 
 ```{r}
 retaildata <- readxl::read_excel("retail.xlsx", skip=1)
+
 ```
 
 ## Select one of the time series as follows (but replace the column name with your own chosen column):
