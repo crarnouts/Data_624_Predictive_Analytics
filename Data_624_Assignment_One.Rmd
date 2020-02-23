@@ -1,0 +1,197 @@
+---
+title: "Data 624 Predictive Analytics Assignment One"
+
+date: "`r Sys.Date()`"
+output: tufte::tufte_html
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Question One
+```{r, message=FALSE,echo=FALSE, warning=FALSE}
+
+library(ggplot2)
+library(forecast)
+
+## use the autoplot function
+autoplot(gold)
+autoplot(woolyrnq)
+autoplot(gas)
+
+
+```
+
+## Frequency of the DataSets
+```{r}
+frequency(gold)
+frequency(woolyrnq)
+frequency(gas)
+```
+
+## Outlier in the Gold Series
+The outlier is the observation at time 770
+
+```{r}
+which.max(gold)
+```
+
+
+# Question Two 
+
+## You can read the data into R with the following script:
+```{r}
+tute1 <- read.csv("tute1.csv", header=TRUE)
+View(tute1)
+```
+
+
+## Convert the data to time series
+```{r}
+
+mytimeseries <- ts(tute1[,-1], start=1981, frequency=4)
+
+```
+
+
+## Construct time series plots of each of the three series
+
+```{r}
+autoplot(mytimeseries, facets=TRUE)
+```
+
+
+## Check what happens when you don’t include facets=TRUE.
+When you don't include the facets arguement the graph is not broken up in three segments and instead is colored in three different colors one for each series
+```{r}
+autoplot(mytimeseries)
+```
+
+# Question Three
+
+This plots show that the overall trend is that going up or Retail sales are increasing over time. There also appears to be a yearly seasonality where people spend more money during the end of the year or the holidays. There also appears to be a cycle from 1982 to 2000, retails sales were steadily rising, from 2000 to 2010 retail sales seemed to plateau, and now since 2010 retail sales have started to steadily increase again.
+
+## You can read the data into R with the following script:
+
+```{r}
+retaildata <- readxl::read_excel("retail.xlsx", skip=1)
+```
+
+## Select one of the time series as follows (but replace the column name with your own chosen column):
+
+```{r}
+myts <- ts(retaildata[,"A3349873A"],
+  frequency=12, start=c(1982,4))
+```
+
+## Explore your chosen retail time series using the following functions:
+
+**AutoPlot**: This plot shows that there seems to be a strong spike in sales every year.
+```{r}
+autoplot(myts)
+```
+
+**Seasonal Plots**: The seasonal plots show that the end of the year results in a high number of sales, this jump normally occurs in december but in the past few years has occurred in november.
+```{r}
+ggseasonplot(myts)
+## try out a polar seasonal plot as well
+ggseasonplot(myts, polar=TRUE) +
+  ylab("$ million") +
+  ggtitle("Polar seasonal plot: Retail Sales")
+```
+
+**Lag Plot**: The Fact that there seems to be a very strong correlation in the lag 12 plot suggests a yearly seasonality in the data
+```{r}
+gglagplot(myts)
+
+```
+
+**Subseries Plots**: The subseries plots show that the month of november has seen some high increases in recent years
+```{r}
+ggsubseriesplot(myts)
+```
+
+
+**ggACF**: The auto correlation plots show the strongest relationship with the 12 month lag which is consistent with what we have seen in the other graphs
+
+```{r}
+
+ggAcf(myts)
+
+```
+
+# Question Six
+
+## Explore the hsales dataset
+The hsales data appears to have some cyclical pattern with the cycles starting in 1975, 1984 and around 1992. For seasonality the highest sales normally appear in march, april, and may and then they trail off for the remainder of the year. sales are the lowest during the winter months which makes sense because this data is looking at sales of one-family houses
+```{r}
+library(fma)
+autoplot(hsales)
+ggseasonplot(hsales)
+ggseasonplot(hsales, polar = TRUE)
+ggsubseriesplot(hsales)
+gglagplot(hsales)
+ggAcf(hsales)
+
+```
+
+
+
+## Explore the usdeaths dataset
+The deaths dataset seems to have some very strong seasonal patterns with deaths increasing every year from march to July and then decreasing from august to february.
+```{r}
+autoplot(usdeaths)
+ggseasonplot(usdeaths)
+ggseasonplot(usdeaths,polar = TRUE)
+ggsubseriesplot(usdeaths)
+gglagplot(usdeaths)
+ggAcf(usdeaths)
+
+```
+
+
+
+## Explore the bricksq dataset
+There does appear to be cycles to the bricksq dataset with one starting in about 1975 and the other starting in 1983. This dataset actually looks kind of similar to the hsales dataset which would make sense since bricks are used for houses. The lags show that the production from one quarter is most heavily correlated with the production from the previous quarter. As far as seasonality goes it is not very strong with this dataset, Q2 and Q3 are normally the highest production months
+```{r}
+autoplot(bricksq)
+ggseasonplot(bricksq)
+ggseasonplot(bricksq, polar = TRUE)
+ggsubseriesplot(bricksq)
+gglagplot(bricksq)
+ggAcf(bricksq)
+
+```
+
+
+
+## Explore the sunspotarea dataset
+For whatever season the seasonal functions did not work with the sunspotarea dataset as it said that the data was not seasonal. I think this is because it is a yearly time series. There did appear to be about a 10 year seasonality to the data however.
+```{r}
+library(fpp)
+sunspotarea <- sunspotarea
+autoplot(sunspotarea)
+#ggseasonplot(sunspotarea)
+#ggseasonplot(sunspotarea,polar = TRUE)
+#ggsubseriesplot(sunspotarea)
+gglagplot(sunspotarea)
+ggAcf(sunspotarea)
+
+```
+
+
+
+## Explore the gasoline dataset
+The gasoline dataset had a strong trend upwards, with maybe a potential cyclical nature. For seasonality the numbers tend to be higher during the middle of the year.
+```{r}
+library(fpp2)
+gasoline <- fpp2::gasoline
+autoplot(gasoline)
+ggseasonplot(gasoline)
+
+gglagplot(gasoline)
+ggAcf(gasoline)
+
+```
+

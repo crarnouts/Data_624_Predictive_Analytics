@@ -1,0 +1,115 @@
+---
+title: "Data 624 Assignment Two - Hyndman Forecasting Chapter 3"
+author: Corey Arnotus
+date: "`r Sys.Date()`"
+output: tufte::tufte_html
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load Libraries 
+```{r}
+library(forecast)
+
+library(fpp2)
+```
+
+
+# Question 3.1
+## For the following series, find an appropriate Box-Cox transformation in order to stabilise the variance.
+
+## usnetelec
+```{r}
+(lambda1 <- BoxCox.lambda(usnetelec))
+
+autoplot(usnetelec)
+
+autoplot(BoxCox(usnetelec,lambda1))
+```
+## usgdp
+```{r}
+(lambda1 <- BoxCox.lambda(usgdp))
+
+autoplot(usgdp)
+
+autoplot(BoxCox(usgdp,lambda1))
+```
+## mcopper
+```{r}
+(lambda1 <- BoxCox.lambda(mcopper))
+
+autoplot(mcopper)
+
+autoplot(BoxCox(mcopper,lambda1))
+```
+## enplanements
+```{r}
+(lambda1 <- BoxCox.lambda(enplanements))
+
+autoplot(enplanements)
+
+autoplot(BoxCox(enplanements,lambda1))
+```
+# Question 3.2
+## Why is a Box-Cox transformation unhelpful for the cangas data?
+The box cox is unable to smooth out the seasonal data for the cangas data set becausse the variance increases and then decreases. The data looks exactly the same before and after the box cox transformation
+```{r}
+(lambda1 <- BoxCox.lambda(cangas))
+
+autoplot(cangas)
+
+autoplot(BoxCox(cangas,lambda1))
+```
+
+# Question 3.3
+The boxcox.lambda function chose a value of .1276369
+so this is the transformation I would select for the retail data
+```{r}
+retaildata <- readxl::read_excel("retail.xlsx", skip=1)
+myts <- ts(retaildata[,"A3349873A"],
+  frequency=12, start=c(1982,4))
+
+(lambda6 <- BoxCox.lambda(myts))
+
+autoplot(BoxCox(myts,lambda6))
+```
+
+
+# Question 3.8
+## a. Split the data into two parts using
+```{r}
+myts.train <- window(myts, end=c(2010,12))
+myts.test <- window(myts, start=2011)
+```
+
+## b.Check that your data have been split appropriately by producing the following plot
+```{r}
+autoplot(myts) +
+  autolayer(myts.train, series="Training") +
+  autolayer(myts.test, series="Test")
+```
+
+
+## c. Calculate forecasts using snaive applied to myts.train.
+```{r}
+fc <- snaive(myts.train)
+```
+
+
+## d.Compare the accuracy of your forecasts against the actual values stored in myts.test
+```{r}
+accuracy(fc,myts.test)
+```
+
+## e.Check the residuals.
+**Do the residuals appear to be uncorrelated and normally distributed?**
+They do appear to be normally distributed however with a slight positve skew. The residuals do no appear to be uncorrelated the lag function actually is showing patterns that would suggest they are correlated will latter lags having smaller and smaller and then negative correlations.
+```{r}
+checkresiduals(fc)
+```
+
+## f.How sensitive are the accuracy measures to the training/test split?
+
+The errors for the test and train set are significant. The test set has larger errors that the training set for the mean error, root mean square error, mean absolute error. It would appear that the model is not generalizing well to the testing data
