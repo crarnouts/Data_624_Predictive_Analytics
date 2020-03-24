@@ -1,0 +1,160 @@
+---
+title: "DATA 624 Homework 3"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::readthedown:
+    highlight: kate
+    toc_depth: 3
+    code_folding: "show"
+---
+
+```{r, echo = T, results = 'hide', include=FALSE}
+library(mlbench)
+library(tidyverse)
+library(corrplot)
+data(Glass)
+str(Glass)
+```
+
+
+
+# 3.1 
+The UC Irvine Machine Learning Repository6 contains a data set related to glass identification. The data consist of 214 glass samples labeled as one of seven class categories. There are nine predictors, including the refractive index and percentages of eight elements: Na, Mg, Al, Si, K, Ca, Ba, and Fe. The data can be accessed via:
+
+## a). Using visualizations, explore the predictor variables to understand their distributions as well as the relationships between predictors.
+
+The variables differ quite a bit. Some are more normally distributed (e.g., Na, Al) while others do not look normal at all (e.g., Ba, Fe, K)
+
+There are high concentrations of silica (Si), sodium (Na) and Calcium (Ca)
+
+```{r}
+glass <- subset(Glass, select = -Type)
+predictors <- colnames(glass)
+
+par(mfrow = c(3, 3))
+for(i in 1:9) {
+  hist(glass[,i], main = predictors[i])
+}
+
+```
+### Relationships between the Variables
+Most of the correlations are negative which makes sense because if there is more of one element than that leaves less room for the other elements in the glass compound.
+
+There are some strong positive relationships (i.e., Rl and Ca, Al and Ba) as well as some strong negative relationships (i.e., Rl and Si, Rl and Al, Mg and Ba).
+
+The strong relationships mose likely just represent elements that are commonly found together or are commonly bonded to one another. One example of this aluminum and Potassium which are commonly found together.
+
+Calcium also has a high correlation with the refractive index meaning that more calcium casuses more light to be able to travel through glass perhaps.
+
+```{r}
+
+Glass %>%
+  select(-Type) %>%
+  cor() %>%
+  round(., 2) %>%
+  corrplot(., method="color", type="upper", order="hclust", addCoef.col = "black", tl.col="black", tl.srt=45, diag=FALSE )
+
+```
+
+### Plot some Relationships
+
+This graph shows the three most prevalent elements in glass plotted againist each other. You can see the groupings by the different types of glass.
+
+```{r}
+
+pairs(glass)
+
+Glass_Important_Variables <- Glass %>% dplyr::select(Si,Ca,Na,Type)
+
+
+my_cols <- c("#00AFBB", "#E7B800", "#FC4E07","grey3", "#E7B800", "#FC4E07") 
+pairs(Glass_Important_Variables[,1:3], pch = 19,  cex = 0.5,
+            col = my_cols[Glass_Important_Variables$Type],
+      lower.panel=NULL)
+```
+
+## b). Do there appear to be any outliers in the data? Are any predictors skewed?
+Yes, there are outliers in the data. The histograms show that K, Fe and Ba variable contains lots of zeros having their graphs highly skewed to the right.
+“K” has a very obvious outlier with a value of 6. “Ba” also has outliers at above 2.0 and “Fe” has an outlier above 0.5.
+Most of the variables including RI, NA, AI, SI, CA have peaks in the center of the distribution. They appear to be more normally distributed. One exception is Mg, which has a trough in the center, but peaks on both ends.
+Lots of outliers in variable Ri, Al, Ca, Ba, Fe.
+The correlation table tell us that most of the variables are not related to each other, except the pair between RI and Ca, the correlation coefficient appear to be 0.7, which is moderately strong.
+
+### Distribution of the amount of different Elements across the different Types of Glass
+This can give you a sense of the variability of elements and also the prescence of outliers
+
+```{r}
+library(plotly)
+
+ggplotly(ggplot(Glass, aes(x=Si, fill=Type)) + geom_density(alpha=.1))
+
+ggplotly(ggplot(Glass, aes(x=RI, fill=Type)) + geom_density(alpha=.1))
+
+ggplotly(ggplot(Glass, aes(x=Na, fill=Type)) + geom_density(alpha=.1))
+
+ggplotly(ggplot(Glass, aes(x=Mg, fill=Type)) + geom_density(alpha=.1))
+
+ggplotly(ggplot(Glass, aes(x=Al, fill=Type)) + geom_density(alpha=.1))
+
+ggplotly(ggplot(Glass, aes(x=K, fill=Type)) + geom_density(alpha=.1))
+
+ggplotly(ggplot(Glass, aes(x=Ca, fill=Type)) + geom_density(alpha=.1))
+
+ggplotly(ggplot(Glass, aes(x=Ba, fill=Type)) + geom_density(alpha=.1))
+
+ggplotly(ggplot(Glass, aes(x=Fe, fill=Type)) + geom_density(alpha=.1))
+
+
+```
+
+## c Are there any relevant transformations of one or more predictors that might improve the classiﬁcation model?
+Yes, transformations like a log or a Box Cox could help improve the classification model.
+Removing skew is removing outliers that improves a model’s performance.
+Also, centering and scaling can be important for all variables with any model.
+Checking if there are any missing values in any columns that can cause a delay or miscalculate or need to addressed by imputation/removal/or other means.
+
+# 3.2
+The soybean data can also be found at the UC Irvine Machine Learning Repository. Data were collected to predict disease in 683 soybeans. The 35 predictors are mostly categorical and include information on the environemental conditions (e.g. temperature, precipitation) and plant conditions (e.g., left spots, mold growth). The outcome labels consist of 19 distinct classes. The data can be loaded via:
+
+
+```{r}
+data("Soybean")
+```
+
+## a).  Investigate the frequency distributions for the categorical predictors. Are any of the distributions degenerate in the ways discussed earlier in this chapter?
+
+There are a few degenerate and that is due to the low frequencies. Most important once are mycelium and sclerotia. The Smoothed Density Scatterplot for the variables shows one color across the chart. The variables leaf.mild and int.discolor appear to show near-zero variance.
+```{r}
+S1 <- Soybean[,2:36]
+par(mfrow = c(3, 6))
+for (i in 1:ncol(S1)) {
+  smoothScatter(S1[ ,i], ylab = names(S1[i]))
+}
+```
+
+
+
+## b).  Roughly 18% of the data are missing. Are there particular predictors that are more likely to be missing? Is the pattern of missing data related to the classes? 
+There is some clear chunks of variable and observation combinations that have quite a few missing values
+
+```{r}
+library(Amelia)
+Soybean %>%
+  arrange(Class) %>%
+  missmap(main = "Missing vs Observed")
+```
+
+
+## c).  Develop a strategy for handling missing data, either by eliminating predictors or imputation
+Relatively simple strategy and not always the best strategy but removing observations that have any missing values is one way to approach the problem
+
+```{r}
+
+Soybean <- Soybean[complete.cases(Soybean ), ]
+
+Soybean %>%
+  arrange(Class) %>%
+  missmap(main = "Missing vs Observed")
+```
+
+

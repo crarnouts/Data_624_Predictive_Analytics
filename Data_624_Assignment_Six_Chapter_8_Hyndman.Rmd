@@ -1,0 +1,384 @@
+---
+title: "DATA 624 Homework 6 Chapter 8"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::readthedown:
+    highlight: kate
+    toc_depth: 3
+    code_folding: "show"
+---
+
+```{r, echo = T, results = 'hide', include=FALSE}
+library(fpp2)
+library(mlbench) 
+library(corrplot)
+library(ggplot2)
+require(gridExtra)
+library(car)
+library(caret)
+library(tidyverse)
+library(DT)
+library(plotly)
+
+
+```
+
+## Question 8.1
+**Figure 8.31 shows the ACFs for 36 random numbers, 360 random numbers and 1,000 random numbers.**
+
+![Question 8.1](C:/Users/arnou/Documents/chapter_8_hyndman.png)
+
+**Explain the differences among these figures. Do they all indicate that the data are white noise?**
+These all look like white noise processes becasue all of the auto correlations fall within the 95% confidence interval. I think the differences in the graphs can
+accounted for simply in the different number of observations in each of the series.
+
+**Why are the critical values at different distances from the mean of zero? Why are the autocorrelations different in each figure when they each refer to white noise?**
+
+According to the law of large numbers As the number of observations increase, the number of large outliers from the mean decreases. We are more certain that a large observation is really an outlier with more data.
+
+## Question 8.2
+
+**A classic example of a non-stationary series is the daily closing IBM stock price series (data set ibmclose). Use R to plot the daily closing prices for IBM stock and the ACF and PACF. Explain how each plot shows that the series is non-stationary and should be differenced.**
+
+```{r}
+autoplot(ibmclose)
+ggAcf(ibmclose)
+ggPacf(ibmclose)
+```
+As you can see from the autolplot the ibmclose time series is not stationary in the mean and it does seems to exhibit some seasonal patterns possibly. Because the time series is not stationary it should be differenced. The ACF plots also show a high correlation for the different lags and on the PACF plot the first lag is very high meaning the price of a stock today is heavily dependent on what the price of the stock was yesterday, which makes a lot of sense.
+
+## Question 8.3
+**For the following series, find an appropriate Box-Cox transformation and order of differencing in order to obtain stationary data.**
+
+### usnetelec
+The trend looks nearly linear
+```{r}
+autoplot(usnetelec, main = "US Net Electricity Generation")
+```
+The ndiffs function says that the series only has to be diffenced once. Since the KPSS test returns a pvalue that is greater than .05 we can conclude that the time series is stationary
+```{r}
+library(tseries)
+
+ndiffs(usnetelec)
+autoplot(diff(usnetelec))
+ggAcf(diff(usnetelec))
+ggPacf(diff(usnetelec))
+kpss.test(diff(usnetelec))
+```
+
+### USGDP
+
+```{r}
+autoplot(usgdp)
+```
+
+
+Let's try out a log transform on the data and then do a first order differencing on the data. Once we take both of these steps then the data looks
+stationary. Since the pvalue is greater than 0.5 we can declare stationarity 
+```{r}
+usgdp_lambda <- BoxCox.lambda(usgdp)
+bc_usgdp <- BoxCox(usgdp, lambda = usgdp_lambda)
+autoplot(bc_usgdp)
+ndiffs(bc_usgdp)
+autoplot(diff(bc_usgdp))
+
+ggAcf(diff(bc_usgdp))
+ggPacf(diff(bc_usgdp))
+kpss.test(diff(bc_usgdp))
+```
+
+### mcopper
+
+```{r}
+autoplot(mcopper, main = "Monthly Grade A Copper Prices")
+```
+
+There seems to have been a spike in copper prices in the late 2000's.
+After taking a log transform and a first order difference of the mccopper data it appears to be stationary and the kpss test refects this as well with a p-value over 0.05
+```{r}
+mcopper_lambda <- BoxCox.lambda(mcopper)
+bc_mcopper <- BoxCox(mcopper, lambda = mcopper_lambda)
+autoplot(bc_mcopper)
+ndiffs(bc_mcopper)
+
+autoplot(diff(bc_mcopper))
+ggAcf(diff(bc_mcopper))
+ggPacf(diff(bc_mcopper))
+kpss.test(diff(bc_mcopper))
+
+```
+
+### enplanements
+
+Seems to be seasonal patterns and the data is not stationary
+```{r}
+autoplot(enplanements, main = "Monthly US Domestic Enplanements")
+```
+
+
+Perform a log transform and then difference the time series to acheive stationarity
+```{r}
+## perform log transfrom and graph the data
+enplanements_lambda <- BoxCox.lambda(enplanements)
+bc_enplanements <- BoxCox(enplanements, lambda = enplanements_lambda)
+autoplot(bc_enplanements)
+#determine the number of differencing required
+ndiffs(bc_enplanements)
+
+autoplot(diff(bc_enplanements))
+ggAcf(diff(bc_enplanements))
+ggPacf(diff(bc_enplanements))
+kpss.test(diff(bc_enplanements))
+
+```
+
+### visitors
+
+```{r}
+autoplot(visitors)
+```
+This series has an increasing trend and an increasing variance and a seasonal pattern
+
+```{r}
+visitors_lambda <- BoxCox.lambda(visitors)
+bc_visitors <- BoxCox(visitors, lambda = visitors_lambda)
+autoplot(bc_visitors)
+
+
+#determine the number of differencing required
+ndiffs(bc_visitors)
+
+autoplot(diff(bc_visitors))
+ggAcf(diff(bc_visitors))
+ggPacf(diff(bc_visitors))
+kpss.test(diff(bc_visitors))
+
+```
+
+
+## Question 8.5
+
+**For your retail data (from Exercise 3 in Section 2.10), find the appropriate order of differencing (after transformation if necessary) to obtain stationary data.**
+
+```{r}
+library(readxl)
+retaildata <- read_excel("retail.xlsx", skip = 1)
+retail <- ts(retaildata[, "A3349873A"], frequency = 12, start = c(1982, 4))
+retail_lambda <- BoxCox.lambda(retail)
+
+autoplot(retail)
+bc_retail <- BoxCox(retail, lambda = retail_lambda)
+
+ndiffs(bc_retail)
+
+autoplot(diff(bc_retail))
+ggAcf(diff(bc_retail))
+ggPacf(diff(bc_retail))
+kpss.test(diff(bc_retail))
+```
+
+Once we take the log transform of the retail dataset and difference it, we can see that the data then becomes stationary
+
+## Question 8.6
+**Use R to simulate and plot some data from simple ARIMA models.**
+Use the following R code to generate data from an AR(1) model (Take parameters given in text)
+```{r}
+y <- ts(numeric(100))
+e <- rnorm(100)
+for(i in 2:100)
+  y[i] <- 0.6*y[i-1] + e[i]
+
+autoplot(y) 
+```
+
+**Produce a time-series plot for the series. How does the plot change as you change phi?**
+
+```{r}
+AR1 <- function(phi){
+  set.seed(42)
+  y <- ts(numeric(100))
+  e <- rnorm(100)
+  for(i in 2:100){
+    y[i] <- phi*y[i-1] + e[i]
+  }
+  return(y)
+}
+
+p <- autoplot(AR1(0.6))
+for(phi in seq(0.1, 0.9, 0.1)){
+  p <- p + autolayer(AR1(phi), series = paste(phi))
+}
+p +
+  labs(title="The effects of changing Phi", color = "Phi")
+```
+Now with a fixed random number seed we can see the effect. As ϕ1 increases, the distance from zero increases. It increases the autocorrelation with the preceeding value.
+
+**Write your own code to generate data from an MA(1) model with θ1=0.6 and σ2=1.**
+
+```{r}
+MA1 <- function(theta){
+  set.seed(42)
+  y <- ts(numeric(100))
+  e <- rnorm(100)
+  e[1] <- 0
+  for(i in 2:100){
+    y[i] <- theta*e[i-1] + e[i]
+  }
+  return(y)
+}
+```
+
+
+**Produce a time plot for the series. How does the plot change as you change θ1?**
+
+```{r}
+p <- autoplot(MA1(0.6))
+for(theta in seq(0.1, 0.9, 0.1)){
+  p <- p + autolayer(MA1(theta), series = paste(theta))
+}
+
+p +
+  labs(title="The effects of changing Theta", color = "Theta") 
+```
+
+As theta increases the distance from zero increases
+
+
+**Generate data from an ARMA(1,1) model with ϕ1=0.6, θ1=0.6 and σ2=1.**
+
+```{r}
+ARMA <- function(phi, theta){
+  set.seed(42)
+  y <- ts(numeric(100))
+  e <- rnorm(100)
+  e[1] <- 0
+  for(i in 2:100)
+    y[i] <- phi*y[i-1] + theta*e[i-1] + e[i]
+  return(y)
+}
+```
+
+
+**Generate data from an AR(2) model with ϕ1=−0.8, ϕ2=0.3 and σ2=1. (Note that these parameters will give a non-stationary series.)**
+
+```{r}
+AR2 <- function(phi_1, phi_2){
+  set.seed(42)
+  y <- ts(numeric(100))
+  e <- rnorm(100)
+  for(i in 3:100)
+    y[i] <- phi_1*y[i-1] + phi_2*y[i-2] + e[i]
+  return(y)
+}
+```
+
+**Graph the latter two series and compare them.**
+
+```{r}
+autoplot(ARMA(0.6, 0.6), series = "ARMA(1,1)") +
+  autolayer(AR2(-0.8, 0.3), series = "AR(2)") +
+  theme(axis.title = element_blank(), legend.position = "bottom", legend.title = element_blank()) +
+  scale_color_brewer(palette = "Set1")
+```
+
+
+
+
+## Question 8.7
+
+Consider wmurders, the number of women murdered each year (per 100,000 standard population) in the United States.
+
+**By studying appropriate graphs of the series in R, find an appropriate ARIMA(p,d,q) model for these data.**
+
+```{r}
+autoplot(wmurders) +
+  ggtitle("Women Murdered in the U.S.")
+```
+
+take a look at what the ndiffs function says about this time series, it says the series should be differenced twice
+```{r}
+ndiffs(wmurders)
+```
+
+Plot the differenced function
+
+```{r}
+autoplot(diff(wmurders))
+ggAcf(diff(wmurders))
+ggPacf(diff(wmurders))
+
+
+```
+
+Plot the twice differenced function
+
+```{r}
+autoplot(diff(diff(wmurders)))
+```
+
+
+**Should you include a constant in the model? Explain.**
+In an ideal world, we’d like the long-term forecasts to tend towards zero, however realistically this won’t be the case. Instead, we’d like it to go towards some non-zero constant, preferably low. According to Hyndman, that would happen if c = 0 and d = 1, so we won’t be adding a constant.
+
+As of now, the model looks like it should be ARIMA(0,1,2)
+
+**Write this model in terms of the backshift operator.**
+\[(1-\phi_1B) (1-B)^2y_t = c + (1 + \theta_1B)e_t\]
+
+**Fit the model using R and examine the residuals. Is the model satisfactory?**
+
+```{r}
+fit <- Arima(wmurders, order = c(0,1,2))
+fit
+
+plot(fit$residuals)
+
+Acf(fit$residuals)
+```
+Our model appears satisfactory. The residuals are all within the bounds. The plot vaguely resembles white noise.
+
+
+**Forecast three times ahead. Check your forecasts by hand to make sure that you know periods shown.**
+
+```{r}
+fcast <- forecast(fit, h=3)
+fcast
+```
+
+To calculate this by hand, we’ll be utilizing the equations from above for AR and MA, where yt=c+yt−1+et. Although for the prediction, we set ϵT+1=0.
+
+```{r}
+c <- fit$coef[1]
+yt <- wmurders[55]
+et <- 0
+f2005 <- c + yt + et
+f2006 <- c + f2005
+f2007 <- c + f2006
+
+c(f2005, f2006, f2007)
+```
+
+
+Except the calculations don’t line up with the model. Presumably, while we know yt, as it is the last known value from wmurders, we are missing the last, corresponding ϵT value.
+
+**Create a plot of the series with forecasts and prediction intervals for the next three periods shown.**
+
+```{r}
+autoplot(fcast)
+```
+
+
+**Does auto.arima() give the same model you have chosen? If not, which model do you think is better?**
+
+```{r}
+autofit <- auto.arima(wmurders, seasonal = FALSE,
+                      stepwise = FALSE, approximation = FALSE)
+autofit
+```
+
+```{r}
+autoplot(autofit$residuals)
+```
+
+auto.arima() is likely the better model. For another thing, speaking more objectively, the AIC and BIC for both are much lower in the auto.arima() than our guess.
+

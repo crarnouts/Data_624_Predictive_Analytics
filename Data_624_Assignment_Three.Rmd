@@ -1,0 +1,95 @@
+---
+title: "DATA 624 Homework 3"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::readthedown:
+    highlight: kate
+    toc_depth: 3
+    code_folding: "show"
+---
+
+
+```{r setup, echo=FALSE, cache=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment=NA, message=FALSE, warning=FALSE)
+library(tidyverse)
+library(fpp2)
+library(forcats)
+library(readxl)
+library(seasonal)
+library(forecast)
+```
+
+
+# Problem 6.2
+The plastics data set consists of the monthly sales (in thousands) of product A for a plastics manufacturer for five years.
+
+**a. Plot the time series of sales of product A. Can you identify seasonal fluctuations and/or a trend-cycle?**
+There appears to be seasonaility and an upward trend cycle 
+```{r}
+plastics <- plastics
+autoplot(plastics)
+```
+
+**b. Use a classical multiplicative decomposition to calculate the trend-cycle and seasonal indices.**
+```{r}
+multiplicative_decomposition <- decompose(plastics, type = "multiplicative")
+autoplot(multiplicative_decomposition)
+```
+**c. Do the results support the graphical interpretation from part a?**
+Yes the results from the muliplicative decomposition do match the graphical interpretation from part a, we can see that there is an upward trend and there is a strong seasonality component.
+
+**d. Compute and plot the seasonally adjusted data.**
+```{r}
+autoplot(plastics, series="Data") +
+  autolayer(trendcycle(multiplicative_decomposition), series="Trend") +
+  autolayer(seasadj(multiplicative_decomposition), series="Seasonally Adjusted") +
+  xlab("Year") + ylab("Monthly Sales in Thousands") +
+  ggtitle("Plastic Product Sales") +
+  scale_colour_manual(values=c("gray","blue","red"), breaks=c("Data","Seasonally Adjusted","Trend"))
+```
+
+**e. Change one observation to be an outlier (e.g., add 500 to one observation), and recompute the seasonally adjusted data. What is the effect of the outlier?**
+```{r}
+outlier_plastics <- plastics
+outlier_plastics[20] <- outlier_plastics[20] + 500
+multiplicative_decomposition_new <- decompose(outlier_plastics, type = "multiplicative")
+
+autoplot(outlier_plastics, series = "Data") +
+  autolayer(trendcycle(multiplicative_decomposition_new), series = "Trend") +
+  autolayer(seasadj(multiplicative_decomposition_new), series = "Seasonally Adjusted") +
+  xlab("Year") + ylab("Monthly Sales in Thousands") +
+  ggtitle("Plastic Product Sales") +
+  scale_color_manual(values=c("gray", "blue", "red"), breaks=c("Data", "Seasonally Adjusted", "Trend"))
+```
+The outlier slighty affects the trend but dramatically effects the seasonally adjusted data.
+
+
+**Does it make any difference if the outlier is near the end rather than in the middle of the time series?**
+The outlier seems to have a slighly stronger impact on the trend component when it is at the end of the series
+
+```{r}
+outlier_plastics <- plastics
+outlier_plastics[50] <- outlier_plastics[50] + 500
+multiplicative_decomposition_new <- decompose(outlier_plastics, type = "multiplicative")
+
+autoplot(outlier_plastics, series = "Data") +
+  autolayer(trendcycle(multiplicative_decomposition_new), series = "Trend") +
+  autolayer(seasadj(multiplicative_decomposition_new), series = "Seasonally Adjusted") +
+  xlab("Year") + ylab("Monthly Sales in Thousands") +
+  ggtitle("Plastic Product Sales") +
+  scale_color_manual(values=c("gray", "blue", "red"), breaks=c("Data", "Seasonally Adjusted", "Trend"))
+```
+
+# Problem 6.3 
+**Recall your retail time series data (from Exercise 3 in Section 2.10). Decompose the series using X11. Does it reveal any outliers, or unusual features that you had not noticed previously?**
+
+There appears to be some spikes in the remainder graphs that may be an indicator of the prescence of outliers 
+
+```{r}
+retaildata <- read_excel("retail.xlsx", skip = 1)
+retail <- ts(retaildata[, "A3349337W"], frequency = 12, start = c(1982, 4))
+x11_retail <- seas(retail, x11="")
+autoplot(x11_retail) +
+  ggtitle("X11 Decomposition of Retail Sales Data")
+```
+
