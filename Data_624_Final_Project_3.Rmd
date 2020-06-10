@@ -1,0 +1,242 @@
+---
+title: "DATA 624 Final Prokect"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::readthedown:
+    highlight: kate
+    toc_depth: 3
+    code_folding: "show"
+---
+#### R Libraries
+```{r, echo = T, results = 'hide', include=FALSE}
+library(caret)
+library(pls)
+library(tidyverse)
+library(AppliedPredictiveModeling)
+library(corrplot)
+library(kableExtra)
+library(mlbench)
+library(dplyr)
+library(corrplot)
+```
+
+#### Exploratory Data Analysis and PreProcessing
+```{r}
+set.seed(42)
+library(readxl)
+train <- read_excel("StudentData.xlsx")
+test <- read_excel("StudentEvaluation.xlsx")
+dim(train)
+dim(test)
+nrow(train[complete.cases(train),]) # Complete observations
+#nrow(train[!complete.cases(train),])
+summary(train) # All predictors are numeric except for "Brand Code, 1st Variable)
+#str(train) 
+summary(test)
+## Handling missing values (Train and Test sets)
+# Response
+train <- train %>% drop_na(PH)
+#Predictors
+transtrain <- preProcess(train, "knnImpute") 
+train <- predict(transtrain, train)
+# transtest <- preProcess(test, "knnImpute",k=1) #k greater than 1 threw an exception: Cannot find more nearest neighbours than there are points
+test <- predict(transtrain, test)
+# Analyze Correlations with the response variable
+library(psych)
+names <- colnames(train[,-26])
+pairs.panels(train[, c("PH", names[1:8])])
+pairs.panels(train[, c("PH", names[9:17])])
+pairs.panels(train[, c("PH", names[18:26])])
+pairs.panels(train[, c("PH", names[27:32])])
+#Code above provides a little bit more info using pairs.panels for response ans some predictors at a time
+#for (i in 1:length(names)){
+#p <- ggplot(train, aes(x=train[,i], y=PH)) +
+#  geom_point(shape=1) +    # Use hollow circles
+#  geom_smooth() +xlab(paste0(names[i]))          # Add a loess smoothed fit curve with confidence region
+#  print(p)
+#}
+##### Correlation Matrix ############
+# Inital code displayin just correlations for all variables at once, which one you prefer?
+train2 <- train %>% dplyr::select(-'Brand Code')
+mydata.cor = cor(train2, method = c("spearman"))
+corrplot(mydata.cor,cl.cex = 0.7,tl.cex = .7,diag = TRUE)
+# Correlated Predictors
+corr <- cor(train[,-c(1,26)], use='complete.obs')
+topcorr <- findCorrelation(corr) #top correlated predictors that could be removed to improve modeling
+colnames(train[,topcorr])
+corrplot(cor(train[,topcorr], use='complete.obs'))
+# Identify Near Zero Variance predictors to remove
+
+    nzv <- nearZeroVar(train)
+colnames(train[,nzv])
+
+boxplot(train[, c(names[2:8])])
+boxplot(train[, c(names[9:17])])
+boxplot(train[, c(names[18:26])])
+boxplot(train[, c(names[27:32])])
+# Isn't this redundant with summary()? which one you guys prefer to use?
+#library(Hmisc)
+#Use Describe Package to calculate Descriptive Statistic
+#(train_d <- describe(train, na.rm=TRUE, interp=FALSE, skew=TRUE, 
+#                         ranges=TRUE, trim=.1, type=3, check=TRUE, fast=FALSE, 
+#                         quant=c(.25,.75), IQR=TRUE))
+# Not sure what this does
+############ Look at some Decision Trees ##################
+source("https://raw.githubusercontent.com/crarnouts/Data_605_Final/master/Random_forest_more_digits.R")
+ colnames(train)<- make.names(colnames(train), unique=TRUE)
+ colnames(test)<- make.names(colnames(test), unique=TRUE)
+train <- as.data.frame(train)
+test <- as.data.frame(test)
+test <- RF_with_Nulls(train,test,"PH",.5,5,10,.01,5,1)
+# Split the Data
+set.seed(42)
+train_index <- createDataPartition(train$PH, p = .7, list = FALSE, times = 1)
+training <- train[train_index,]
+testing <- train[-train_index,]
+```
+
+# Models
+# Linear Model
+```{r}
+lm <- lm(PH~.,data = training)
+summary(lm)
+```
+
+## MARS MODEL
+```{r}
+library(earth)
+MARS_grid <- expand.grid(.degree = 1:3, .nprune = 2:10)
+MARS_model <- train(PH ~., 
+                    data = training,
+                    method = "earth",
+                    tuneGrid = MARS_grid,
+                    preProcess = c("center", "scale"),
+                    tuneLength = 5,na.action = na.exclude)
+MARS_model
+summary(MARS_model)
+```
+
+```{r}
+library(caret)
+knnModel <- train(PH ~., 
+                    data = training,
+                  method = "knn",
+                  preProcess = c("center", "scale"),
+                  tuneLength = 10,na.action = na.exclude)
+knnModel
+```
+
+## Bagged Tree Model
+```{r}
+bagControl = bagControl(fit = ctreeBag$fit, predict = ctreeBag$pred, aggregate = ctreeBag$aggregate)
+bag_model <- train(PH ~., 
+                    data = training, method="bag", bagControl = bagControl,
+                   center = TRUE,
+                   scale = TRUE,
+                   trControl = trainControl("cv", number = 5),
+                   tuneLength = 25,na.action = na.exclude)
+
+bag_model
+```
+
+```{r}
+gbm_model <- train(PH ~., 
+                    data = training, method="gbm", verbose = FALSE,
+                   trControl = trainControl("cv", number = 5),
+                   tuneLength = 20,na.action = na.exclude)
+gbm_model
+```
+
+
+```{r}
+# gbm_model <- train(PH ~., 
+#                     data = training, method="gbm", verbose = FALSE,
+#                    trControl = trainControl("cv", number = 5),
+#                    tuneLength = 20,na.action = na.exclude)
+# gbm_model
+
+gbmGrid <- expand.grid(interaction.depth = (10:12) * 2, n.trees = 2000, shrinkage =.01,n.minobsinnode=10)
+
+gbmFit <- train(PH ~., 
+                    data = training, method="gbm", trControl = trainControl("cv", number = 3), verbose = FALSE, bag.fraction = 0.5, tuneGrid = gbmGrid,na.action = na.exclude)
+
+gbmFit
+
+```
+
+
+
+```{r}
+library(gbm)
+
+varImp(gbm)
+```
+
+
+
+# Fit a Random Forest in Caret using Ranger Package
+
+```{r}
+
+tgrid <- expand.grid(
+  mtry = 2:4,
+  splitrule = "gini",
+  min.node.size = c(10, 20)
+)
+
+```
+
+
+
+# Predict with the gbm 
+
+```{r}
+gbm_predictions <- predict(gbm_model,testing)
+```
+
+
+
+```{r}
+if(!require(xgboost)) library(xgboost)
+if(!require(Matrix)) library(Matrix)
+#converting datasets to matrices
+#options(na.action="na.pass")
+training2 <- training %>% drop_na(`Brand Code`)
+testing2 <- testing %>% drop_na(`Brand Code`)
+trainingmx<-model.matrix(~.+0,data=training2[,names(training2) != c("PH")])
+testingmx<-model.matrix(~.+0,data=testing2[,names(testing2) != c("PH")])
+trainingdmx <- xgb.DMatrix(data = trainingmx, label=training2$PH)
+testingdmx <- xgb.DMatrix(data = testingmx, label=testing2$PH)
+#default parameters
+params <- list(booster = "gbtree", objective = "reg:linear", eta=0.3, gamma=0, max_depth=6, min_child_weight=1, subsample=1, colsample_bytree=1)
+#determine the best nround parameter (It controls the maximum number of iterations. For classification, it is similar to the number of trees to grow.)
+xgbcv <- xgb.cv( params = params, data = trainingdmx, nrounds = 300, nfold = 5, showsd = T, stratified = T, print_every_n = 10, early_stop_rounds = 20, maximize = F) # best at 250 iterations
+xgb_model1 <- xgb.train (params = params, data = trainingdmx, nrounds = 250, watchlist = list(val=testingdmx,train=trainingdmx), print_every_n = 10, early_stop_round = 10, maximize = F)
+xgbpred <- predict(xgb_model1,testingdmx)
+mat <- xgb.importance (feature_names = colnames(trainingmx),model = xgb_model1)
+xgb.plot.importance (importance_matrix = mat)
+```
+
+
+```{r}
+
+train <- read_excel("StudentData.xlsx")
+test <- read_excel("StudentEvaluation.xlsx")
+ colnames(train)<- make.names(colnames(train), unique=TRUE)
+ colnames(test)<- make.names(colnames(test), unique=TRUE)
+ library(VIM)
+library(readxl)
+train_imp <- train %>%
+  filter(is.na(PH)==FALSE)
+train <- kNN(train_imp, imp_var = FALSE) # kNN imputation
+train <- as.data.frame(train)
+test <- as.data.frame(test)
+train <- train %>% drop_na(PH)
+test2 <- test %>% select(Mnf.Flow,Oxygen.Filler,Brand.Code,PH)
+train2 <- train %>% select(Mnf.Flow,Oxygen.Filler,Brand.Code,PH)
+test2 <- RF_with_Nulls(train2,test2,"PH",.5,5,10,.01,5,1)
+
+
+
+```
+

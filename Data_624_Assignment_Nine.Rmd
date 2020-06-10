@@ -1,0 +1,306 @@
+---
+title: "DATA 624 Homework 9"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::readthedown:
+    highlight: kate
+    toc_depth: 3
+    code_folding: "show"
+---
+
+```{r, echo = T, results = 'hide', include=FALSE}
+library(caret)
+library(pls)
+library(tidyverse)
+library(AppliedPredictiveModeling)
+library(corrplot)
+library(kableExtra)
+library(randomForest)
+
+```
+
+# Question 8.1
+
+
+**In this exercise we work with the simulated dataset from Exercise 7.2. We use the mlbench.friedman1 function from the mlbench library to simulate data for ten predictor variables V1 through V10 and one response variable y from the following nonlinear equation:**
+
+\[y = 10 \sin (\pi V_1 V_2) + 20 (V_3 -0.5)^2 + 10 V_4 + 5 V_5 + \epsilon\]
+
+**where the Vj are random variables uniformly distributed on [0, 1] and the error term ϵ∼N(0,σ2) is normally distributed. Note that only the first five Vj variables enter the equation for the response y; the remaining Vj variables are non-informative / noise variables. Our sample size is 200.**
+
+
+```{r}
+library(mlbench)  
+set.seed(200)  
+simulated <- mlbench.friedman1(200, sd = 1)  
+simulated <- cbind(simulated$x, simulated$y)  
+simulated <- as.data.frame(simulated)  
+colnames(simulated)[ncol(simulated)] <- "y" 
+```
+
+## (a) Fit a random forest model to all of the predictors, then estimate the variable importance scores:
+```{r}
+set.seed(1012)
+rf <- randomForest(y ~ ., data = simulated,  
+                       importance = TRUE,  
+                       ntree = 1000, mtry = 3)  
+rf
+```
+
+**The variable importance scores are output below. We see that the most important variables in the random forest model are V1, V4, V2, and V5; none of the non-informative predictors (V6 through V10) are significant in the model.**
+```{r}
+rfImp1 <- varImp(rf, scale = FALSE)
+
+rfImp1
+```
+
+## Additional Predictor
+**Now add an additional predictor that is highly correlated with one of the informative predictors. For example:**
+
+```{r}
+set.seed(200)
+simulated$duplicate1 <- simulated$V1 + rnorm(200) * .1
+cor(simulated$duplicate1, simulated$V1)
+```
+
+
+**Fit another random forest model to these data. Did the importance score for V1 change? What happens when you add another predictor that is also highly correlated with V1?**
+
+```{r}
+rf2 <- randomForest(y ~ ., 
+                       data = simulated,
+                       importance = TRUE,
+                       ntree = 1000)
+rfImp2 <- varImp(rf2, scale = FALSE)
+
+
+rfImp2 <- varImp(rf2, scale = FALSE) 
+rfImp <- merge(rfImp1, rfImp2, by = "row.names", all = TRUE, sort = FALSE)
+colnames(rfImp) <- c("Variable", "RF", "RF_dup")
+rfImp %>% kable(digits = 3, 
+                caption = "Variable importance scores for random forest model")
+```
+We see that the importance score for V1 has changed, and in fact has been diluted by the effect of the correlated predictor. For instance, in the first RF model, the importance score for V1 is ~ 8.7, whereas in the second RF model, the influence of V1 has been divided into V1 (with score ~ 5.7) and duplicate1 (with score ~ 4.3).
+
+
+## cForest Function
+
+**Use the cforest function in the party package to fit a random forest model using conditional inference trees. The party package function varimp can calculate predictor importance. The conditional argument of that function toggles between the traditional importance measure and the modified version described in Strobl et al. (2007). Do these importances show the same pattern as the traditional random forest model?**
+
+## Boosted Trees and Cubist 
+
+**Repeat this process with different tree models, such as boosted trees and
+Cubist. Does the same pattern occur?**
+
+
+# Question 8.2
+**Repeat this process with different tree models, such as boosted trees and Cubist. Does the same pattern occur?**
+In this chapter, we learned that single regression trees suffer from selection bias such that predictors with a higher number of distinct values (low var) are favored over more granular predictors (high var).
+
+This simulation was created with two variables, X1 and X2, each containing 200 values. One of the variables has a low variance predictor that correlates to the response variable and the second variable has high variance with no relation to the response variable.
+
+If we assume that X1 was the true correlated variable to the response variable, however, since so much noise was introduced to X2 (highly granular), X2 is now the more important variable in this dataset which affects the bias.
+
+```{r}
+library(rpart)
+set.seed(200)
+X1 <- rep(1:2,each=100)
+X2 <- rnorm(200,mean=0,sd=2)
+Y <- X1 + rnorm(200,mean=0,sd=4)
+
+df1 <- data.frame(Y=Y, X1=X1, X2=X2)
+
+mod <- rpart(Y ~ ., data = df1)
+varImp(mod)
+```
+
+
+
+# Question 8.3
+
+![Figure 8.24](C:/Users/arnou/Documents/Data_624_Predictive_Analytics/applied-predictive-modeling-fig-824.png)
+
+
+**In stochastic gradient boosting the bagging fraction and learning rate will govern the construction of the trees as they are guided by the gradient. Although the optimal values of these parameters should be obtained through the tuning process, it is helpful to understand how the magnitudes of these parameters affect magnitudes of variable importance. Figure 8.24 provides the variable importance plots for boosting using two extreme values for the bagging fraction (0.1 and 0.9) and the learning rate (0.1 and 0.9) for the solubility data. The left-hand plot has both parameters set to 0.1, and the right-hand plot has both set to 0.9:**
+
+## Predictors
+**Why does the model on the right focus its importance on just the first few of predictors, whereas the model on the left spreads importance across more predictors?**
+
+The model on the right focuses its’ importance on just the first few predictors because as the learning rate increases, the model will use fewer predictors. Also due to the bagging fraction, the higher the fraction, the less predictors will be identified as important.
+
+
+## Predictive
+**Which model do you think would be more predictive of other samples?**
+
+As learning rate and bagging fraction control the overfitting of the gradient boosting model that requires tuning then a smaller learning rate and bagging fraction would give better generalization over unseen samples. So, a model with a 0.1 learning rate and bagging fraction will be more predictive of other samples. However, this may lead to a trade off between bias-variance.Always go for an ensemble of weak predictors.
+
+## Interaction Depth 
+**How would increasing interaction depth affect the slope of predictor importance for either model in Fig. 8.24?**
+Increasing the interaction depth will most likely decrease the slope of the variable importance for either model. The reason for this is that increasing the interaction depth produces stronger / more complex learners at each iteration step, which will include more variables in each learner. As a result the final model will likely include a greater diversity of variables that are influential in the model, so that importance scores are less concentrated in the top predictors.
+
+
+# Question 8.7 - Chemical Manufacturing Process
+**Refer to Exercises 6.3 and 7.5 which describe a chemical manufacturing process. Use the same data imputation, data splitting, and pre-processing steps as before and train several tree-based models:**
+
+
+```{r}
+library(AppliedPredictiveModeling)
+data(ChemicalManufacturingProcess)
+library(RANN)
+
+
+knn_model <- preProcess(ChemicalManufacturingProcess, "knnImpute")
+df <- predict(knn_model, ChemicalManufacturingProcess)
+
+
+df <- df %>%
+  select_at(vars(-one_of(nearZeroVar(., names = TRUE))))
+
+in_train <- createDataPartition(df$Yield, times = 1, p = 0.8, list = FALSE)
+train_df <- df[in_train, ]
+test_df <- df[-in_train, ]
+
+pls_model <- train(
+  Yield ~ ., data = train_df, method = "pls",
+  center = TRUE,
+  scale = TRUE,
+  trControl = trainControl("cv", number = 10),
+  tuneLength = 25
+)
+pls_predictions <- predict(pls_model, test_df)
+pls_in_sample <- pls_model$results[pls_model$results$ncomp == pls_model$bestTune$ncomp,]
+results <- data.frame(t(postResample(pred = pls_predictions, obs = test_df$Yield))) %>%
+  mutate("In Sample RMSE" = pls_in_sample$RMSE,
+         "In Sample Rsquared" = pls_in_sample$Rsquared,
+         "In Sample MAE" = pls_in_sample$MAE,
+         "Model"= "PLS")
+```
+
+
+### Bagged Tree
+
+```{r}
+set.seed(42)
+bagControl = bagControl(fit = ctreeBag$fit, predict = ctreeBag$pred, aggregate = ctreeBag$aggregate)
+bag_model <- train(Yield ~ ., data = train_df, method="bag", bagControl = bagControl,
+                   center = TRUE,
+                   scale = TRUE,
+                   trControl = trainControl("cv", number = 10),
+                   tuneLength = 25)
+bag_predictions <- predict(bag_model, test_df)
+bag_in_sample <- merge(bag_model$results, bag_model$bestTune)
+results <- data.frame(t(postResample(pred = bag_predictions, obs = test_df$Yield))) %>%
+  mutate("In Sample RMSE" = bag_in_sample$RMSE,
+         "In Sample Rsquared" = bag_in_sample$Rsquared,
+         "In Sample MAE" = bag_in_sample$MAE,
+         "Model"= "Bagged Tree") %>%
+  rbind(results)
+bag_model
+
+
+```
+
+## Gradient Boosting Machine 
+
+```{r}
+set.seed(42)
+gbm_model <- train(Yield ~ ., data = train_df, method="gbm", verbose = FALSE,
+                   trControl = trainControl("cv", number = 10),
+                   tuneLength = 25)
+gbm_predictions <- predict(gbm_model, test_df)
+gbm_in_sample <- merge(gbm_model$results, gbm_model$bestTune)
+results <- data.frame(t(postResample(pred = gbm_predictions, obs = test_df$Yield))) %>%
+  mutate("In Sample RMSE" = gbm_in_sample$RMSE,
+         "In Sample Rsquared" = gbm_in_sample$Rsquared,
+         "In Sample MAE" = gbm_in_sample$MAE,
+         "Model"= "Boosted Tree") %>%
+  rbind(results)
+gbm_model
+plot(gbm_model)
+
+ggplot(gbm_model, highlight = TRUE) + 
+  labs(title = paste0("Tuning profile: ", gbm_model$modelInfo$label))
+```
+
+## Random Forest
+
+```{r}
+set.seed(42)
+rf_model <- train(Yield ~ ., data = train_df, method = "ranger", 
+                  scale = TRUE,
+                  trControl = trainControl("cv", number = 10),
+                  tuneLength = 25)
+rf_predictions <- predict(rf_model, test_df)
+rf_in_sample <- merge(rf_model$results, rf_model$bestTune)
+results <- data.frame(t(postResample(pred = rf_predictions, obs = test_df$Yield))) %>%
+  mutate("In Sample RMSE" = rf_in_sample$RMSE,
+         "In Sample Rsquared" = rf_in_sample$Rsquared,
+         "In Sample MAE" = rf_in_sample$MAE,
+         "Model"= "Random Forest") %>%
+  rbind(results)
+rf_model
+plot(rf_model)
+
+ggplot(rf_model, highlight = TRUE) + 
+  labs(title = paste0("Tuning profile: ", rf$modelInfo$label))
+```
+
+
+
+
+## Conditional Inference Random Forest
+
+```{r}
+set.seed(42)
+crf_model <- train(Yield ~ ., data = train_df, method = "cforest",
+                   trControl = trainControl("cv", number = 10),
+                   tuneLength = 25)
+crf_predictions <- predict(crf_model, test_df)
+crf_in_sample <- merge(crf_model$results, crf_model$bestTune)
+results <- data.frame(t(postResample(pred = crf_predictions, obs = test_df$Yield))) %>%
+  mutate("In Sample RMSE" = crf_in_sample$RMSE,
+         "In Sample Rsquared" = crf_in_sample$Rsquared,
+         "In Sample MAE" = crf_in_sample$MAE,
+         "Model"= "Conditional Random Forest") %>%
+  rbind(results)
+crf_model
+plot(crf_model)
+
+ggplot(crf_model, highlight = TRUE) + 
+  labs(title = paste0("Tuning profile: ", crf_model$modelInfo$label))
+```
+
+
+## Corey's Transparent Random Forest Function
+This is my own Random Forest Function that I built and it can display any of the underlying trees right now I am having it display only every 100th tree.
+
+```{r}
+source("https://raw.githubusercontent.com/crarnouts/Data_605_Final/master/RandomForestNulls_testing.R")
+test_df2 <- RF_with_Nulls(train_df,test_df,"Yield",.5,5,1000,.0005,4,100)
+ 
+cor_RF_predictions <- test_df2$prediction_overall
+
+results <- data.frame(t(postResample(pred = cor_RF_predictions, obs = test_df$Yield))) %>%
+  mutate("In Sample RMSE" = "N/A",
+         "In Sample Rsquared" = "N/A",
+         "In Sample MAE" = "N/A",
+         "Model"= "Coreys Random Forest") %>%
+  rbind(results)
+```
+
+
+```{r}
+results %>%
+  arrange(RMSE) %>%
+  kable() %>%
+  kable_styling()
+```
+
+
+
+
+
+
+
+
+

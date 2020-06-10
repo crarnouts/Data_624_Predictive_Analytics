@@ -1,0 +1,276 @@
+---
+title: "DATA 624 Final Prokect"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::readthedown:
+    highlight: kate
+    toc_depth: 3
+    code_folding: "show"
+---
+
+```{r, echo = T, results = 'hide', include=FALSE}
+library(caret)
+library(pls)
+library(tidyverse)
+library(AppliedPredictiveModeling)
+library(corrplot)
+library(kableExtra)
+
+```
+
+
+
+
+
+```{r}
+library(readxl)
+train <- read_excel("StudentData.xlsx")
+test <- read_excel("StudentEvaluation.xlsx")
+
+
+
+library(caret)
+library(pls)
+library(tidyverse)
+library(AppliedPredictiveModeling)
+library(corrplot)
+library(kableExtra)
+library(mlbench)
+library(dplyr)
+
+
+train <- train %>% drop_na(PH)
+train$Temperature_Usage_multiplicative <- train$Temperature*train$`Usage cont`
+test$Temperature_Usage_multiplicative <- test$Temperature*test$`Usage cont`
+
+########################### Exploratory Data Analysis #######################################
+
+
+#From DataExplorer
+data_list <- list(train)
+# 
+# PlotStr(data_list, type="r")
+
+rm(data_list)
+
+dim(train)
+
+summary(train)
+
+library(Hmisc)
+#Use Describe Package to calculate Descriptive Statistic
+(train_d <- describe(train, na.rm=TRUE, interp=FALSE, skew=TRUE, 
+                         ranges=TRUE, trim=.1, type=3, check=TRUE, fast=FALSE, 
+                         quant=c(.25,.75), IQR=TRUE))
+
+
+
+
+str(train) ## look at structure of the data all but one of the variables are numeric
+
+
+
+### Standardize the Data ####
+
+
+# knn_model <- preProcess(train, "knnImpute") ## this does not impute values for the class variable?
+# train <- predict(knn_model, train)
+# 
+# knn_model <- preProcess(test, "knnImpute") ## this does not impute values for the class variable?
+# test<- predict(knn_model, test)
+
+
+##### Correlation Matrix ############
+
+train2 <- train %>% dplyr::select(-'Brand Code')
+
+library(corrplot)
+
+mydata.cor = cor(train2, method = c("spearman"))
+corrplot(mydata.cor,cl.cex = 0.7,tl.cex = .7,diag = TRUE)
+
+############ Look at some Decision Trees ##################
+source("https://raw.githubusercontent.com/crarnouts/Data_605_Final/master/RandomForestNulls_testing.R")
+ colnames(train)<- make.names(colnames(train), unique=TRUE)
+ colnames(test)<- make.names(colnames(test), unique=TRUE)
+train <- as.data.frame(train)
+test <- as.data.frame(test)
+
+test <- RF_with_Nulls(train,test,"PH",.5,5,10,.008,5,1)
+
+
+
+```
+
+
+
+# Scatterplots
+
+```{r}
+### Let's look at some scatterplots
+
+
+
+names <- colnames(train)
+
+for (i in 1:length(names)){
+p <- ggplot(train, aes(x=train[,i], y=PH)) +
+  geom_point(shape=1) +    # Use hollow circles
+  geom_smooth() +xlab(paste0(names[i]))          # Add a loess smoothed fit curve with confidence region
+
+
+  print(p)
+}
+
+
+p <- ggplot(train, aes(x=Mnf.Flow, y=PH)) +
+  geom_point(shape=1) +    # Use hollow circles
+  geom_smooth()   
+
+p
+```
+
+#Box and Whisker Plot
+
+
+
+```{r}
+
+
+p<-ggplot(train, aes(x=Brand.Code, y=PH, color=Brand.Code)) +
+  geom_boxplot()
+p
+
+
+```
+
+
+# Split the Data
+
+```{r}
+set.seed(42)
+train_index <- createDataPartition(train$PH, p = .7, list = FALSE, times = 1)
+training <- train[train_index,]
+testing <- train[-train_index,]
+```
+
+
+
+
+
+# Models
+
+# Linear Model
+
+```{r}
+lm <- lm(PH~.,data = training)
+
+summary(lm)
+```
+
+
+
+## MARS MODEL
+
+```{r}
+library(earth)
+MARS_grid <- expand.grid(.degree = 1:3, .nprune = 2:10)
+MARS_model <- train(PH ~., 
+                    data = training,
+                    method = "earth",
+                    tuneGrid = MARS_grid,
+                    preProcess = c("center", "scale"),
+                    tuneLength = 5,na.action = na.exclude)
+MARS_model
+
+summary(MARS_model)
+```
+
+
+
+```{r}
+library(caret)
+knnModel <- train(PH ~., 
+                    data = training,
+                  method = "knn",
+                  preProcess = c("center", "scale"),
+                  tuneLength = 10,na.action = na.exclude)
+knnModel
+
+```
+
+
+## Bagged Tree Model
+
+```{r}
+
+bagControl = bagControl(fit = ctreeBag$fit, predict = ctreeBag$pred, aggregate = ctreeBag$aggregate)
+bag_model <- train(PH ~., 
+                    data = training, method="bag", bagControl = bagControl,
+                   center = TRUE,
+                   scale = TRUE,
+                   trControl = trainControl("cv", number = 5),
+                   tuneLength = 25,na.action = na.exclude)
+
+bag_model
+```
+
+
+
+```{r}
+gbm_model <- train(PH ~., 
+                    data = training, method="gbm", verbose = FALSE,
+                   trControl = trainControl("cv", number = 5),
+                   tuneLength = 20,na.action = na.exclude)
+
+gbm_model
+
+
+# increase the number of trees
+
+```
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+## Construct a GBM Grid perhaps
+
+gbmGrid <-  expand.grid(interaction.depth = c(5, 10, 15),
+                         n.trees = (10:30)*50,
+                         shrinkage = 0.001,
+                        n.minobsinnode =10)
+
+
+gbm_model <- train(PH ~., 
+                    data = training, method="gbm", verbose = FALSE,
+                   #trControl = trainControl("cv", number = 5),
+                   tuneGrid = gbmGrid,
+                   #n.minobsinnode =10,
+                   #n.trees =5000,
+                   #shrinkage = .01,
+                   interaction.depth = 7,
+                   na.action = na.exclude)
+
+gbm_model
+```
+
+
+
+
+
+
+
+
+
+
+
+

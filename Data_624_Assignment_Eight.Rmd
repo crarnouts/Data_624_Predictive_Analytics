@@ -1,0 +1,455 @@
+---
+title: "DATA 624 Homework 9"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::readthedown:
+    highlight: kate
+    toc_depth: 3
+    code_folding: "show"
+---
+
+```{r, echo = T, results = 'hide', include=FALSE}
+library(caret)
+library(pls)
+library(tidyverse)
+library(AppliedPredictiveModeling)
+library(corrplot)
+library(kableExtra)
+
+```
+
+
+# Question 7.2
+
+**Friedman (1991) introduced several benchmark data sets created by simulation. On of these simulations used the following nonlinear equations to create data:**
+
+\[y = 10 sin(\pi x_1x_2) + 20(x_3- 0.5)^2 + 10x_4 + 5x_5 + N(0, \sigma^2)\]
+
+**where the x values are random variables uniformly distributed between [0,1] (there are also 5 other non-informative variables also created in the simulation). The package mlbench contains a function called mlbench.friedman1 that simulates these data:**
+
+```{r}
+library(mlbench)
+set.seed(200)
+trainingData <- mlbench.friedman1(200, sd = 1)
+## We convert the 'x' data from a matrix to a data frame
+## One reason is that this will five the columns names.
+trainingData$x <- data.frame(trainingData$x)
+## Look at the data using
+featurePlot(trainingData$x, trainingData$y)
+## or other methods.
+
+## This creates a list with a vector 'y' and a matrix
+## of predictors 'x'.  Also simulate a large test set to
+## estimate the true error rate with good precision:
+testData <- mlbench.friedman1(5000, sd = 1)
+testData$x <- data.frame(testData$x)
+
+```
+
+**Tune several models on these data. For example:**
+
+## KNN MODEL
+```{r}
+library(caret)
+knnModel <- train(x = trainingData$x, 
+                  y = trainingData$y,
+                  method = "knn",
+                  preProcess = c("center", "scale"),
+                  tuneLength = 10)
+knnModel
+
+```
+
+```{r}
+knnPred <- predict(knnModel, newdata = testData$x)
+## The function 'postResample' can be used to get the test set
+## performance values
+postResample(pred = knnPred, obs = testData$y)
+```
+
+**Which models appear to give the best performance? Does MARS select the informative predictors (those named X1-X5)?**
+
+## MARS MODEL
+
+```{r}
+library(earth)
+MARS_grid <- expand.grid(.degree = 1:2, .nprune = 2:15)
+MARS_model <- train(x = trainingData$x, 
+                  y = trainingData$y,
+                  method = "earth",
+                  tuneGrid = MARS_grid,
+                  preProcess = c("center", "scale"),
+                  tuneLength = 10)
+MARS_model
+```
+### Look at the Perfomance of the MARS Model
+```{r}
+MARS_predictions <- predict(MARS_model, newdata = testData$x)
+postResample(pred = MARS_predictions, obs = testData$y)
+```
+
+### Look at Variable Importance 
+
+```{r}
+varImp(MARS_model)
+```
+
+## SVM MODEL
+
+```{r}
+library(kernlab)
+SVM_model <- train(x = trainingData$x,
+                   y = trainingData$y,
+                   method = "svmRadial",
+                   preProcess = c("center", "scale"),
+                   tuneLength = 10,
+                   trControl = trainControl(method = "cv"))
+SVM_model
+```
+
+### Results of the SVM Model and the Most Important Variables for SVM
+```{r}
+SVM_predictions <- predict(SVM_model, newdata = testData$x)
+postResample(pred = SVM_predictions, obs = testData$y)
+varImp(SVM_model)
+```
+
+## Neural Network Model 
+
+```{r}
+nnet_grid <- expand.grid(.decay = c(0, 0.01, .1), .size = c(1:10), .bag = FALSE)
+nnet_maxnwts <- 5 * (ncol(trainingData$x) + 1) + 5 + 1
+nnet_model <- train(x = trainingData$x,
+                    y = trainingData$y,
+                    method = "avNNet",
+                    preProcess = c("center", "scale"),
+                    tuneGrid = nnet_grid,
+                    trControl = trainControl(method = "cv"),
+                    linout = TRUE,
+                    trace = FALSE,
+                    MaxNWts = nnet_maxnwts,
+                    maxit = 500)
+nnet_model
+```
+
+### Results of the Neural Net Model and the Most Important Variables for the Neural Net
+```{r}
+nnet_predictions <- predict(nnet_model, newdata = testData$x)
+postResample(pred = nnet_predictions, obs = testData$y)
+varImp(nnet_model)
+```
+
+## Random Forest Model
+
+```{r}
+
+#10 folds repeat 3 times
+control <- trainControl(method='repeatedcv', 
+                        number=10, 
+                        repeats=3)
+#Metric compare model is Accuracy
+metric <- "Accuracy"
+set.seed(123)
+#Number randomely variable selected is mtry
+mtry <- sqrt(ncol(trainingData$x))
+tunegrid <- expand.grid(.mtry=c(1:10))
+rf_default <- train(x = trainingData$x,
+                    y = trainingData$y,
+                      method='rf', 
+                      metric='RMSE', 
+                      tuneGrid=tunegrid, 
+                      trControl=control)
+rf_default
+```
+
+
+```{r}
+rf_predictions <- predict(rf_default, newdata = testData$x)
+postResample(pred = rf_predictions , obs = testData$y)
+
+```
+
+
+
+
+
+## Look at the Results of the Models
+```{r}
+results <- data.frame(t(postResample(pred = knnPred, obs = testData$y))) %>% 
+  mutate("Model" = "KNN")
+
+results <- data.frame(t(postResample(pred = MARS_predictions, obs = testData$y))) %>%
+  mutate("Model"= "MARS") %>%
+  bind_rows(results)
+
+results <- data.frame(t(postResample(pred = SVM_predictions, obs = testData$y))) %>%
+  mutate("Model"= "SVM") %>%
+  bind_rows(results)
+
+results <- data.frame(t(postResample(pred = nnet_predictions, obs = testData$y))) %>%
+  mutate("Model"= "Neural Network") %>%
+  bind_rows(results)
+
+
+results <- data.frame(t(postResample(pred = rf_predictions, obs = testData$y))) %>%
+  mutate("Model"= "Random Forest") %>%
+  bind_rows(results)
+
+results %>%
+  select(Model, RMSE, Rsquared, MAE) %>%
+  arrange(RMSE) 
+
+
+rm(results)
+```
+
+**The MARS model was the top performing model**
+
+
+# Question 7.5
+
+**Exercise 6.3 describes data for a chemical manufacturing process. Use the same data imputation, data splitting, and pre-processing steps as before and training several nonlinear regression models.**
+
+## Pre-Processing from last Homework
+
+```{r}
+library(AppliedPredictiveModeling)
+data(ChemicalManufacturingProcess)
+library(RANN)
+
+
+knn_model <- preProcess(ChemicalManufacturingProcess, "knnImpute")
+df <- predict(knn_model, ChemicalManufacturingProcess)
+
+
+df <- df %>%
+  select_at(vars(-one_of(nearZeroVar(., names = TRUE))))
+
+in_train <- createDataPartition(df$Yield, times = 1, p = 0.8, list = FALSE)
+train_df <- df[in_train, ]
+test_df <- df[-in_train, ]
+
+```
+
+
+## (a) Which nonlinear regression model gives the optimal resampling and test set performance?
+
+
+### Partial Least squares
+```{r}
+pls_model <- train(
+  Yield ~ ., data = train_df, method = "pls",
+  center = TRUE,
+  scale = TRUE,
+  trControl = trainControl("cv", number = 10),
+  tuneLength = 25
+)
+
+pls_model
+
+pls_predictions <- predict(pls_model, test_df)
+
+results <- data.frame(t(postResample(pred = pls_predictions, obs = test_df$Yield))) %>%
+  mutate("Model"= "PLS")
+```
+
+```{r}
+pls_predictions <- predict(pls_model, test_df)
+
+results <- data.frame(t(postResample(pred = pls_predictions, obs = test_df$Yield))) %>%
+  mutate("Model"= "PLS")
+```
+
+### KNN Model
+
+```{r}
+knn_model <- train(
+  Yield ~ ., data = train_df, method = "knn",
+  center = TRUE,
+  scale = TRUE,
+  trControl = trainControl("cv", number = 10),
+  tuneLength = 25
+)
+knn_model
+
+knn_predictions <- predict(knn_model, test_df)
+
+results <- data.frame(t(postResample(pred = knn_predictions, obs = test_df$Yield))) %>%
+  mutate("Model"= "KNN") %>% rbind(results)
+
+ggplot(knn_model, highlight = TRUE) + 
+  labs(title = paste0("Tuning profile: ", knn_model$modelInfo$label))
+
+```
+
+### MARS Model
+
+```{r}
+MARS_grid <- expand.grid(.degree = 1:2, .nprune = 2:15)
+
+MARS_model <- train(
+  Yield ~ ., data = train_df, method = "earth",
+  tuneGrid = MARS_grid,
+  # If the following lines are uncommented, it throws an error
+  #center = TRUE,
+  #scale = TRUE,
+  trControl = trainControl("cv", number = 10),
+  tuneLength = 25
+)
+MARS_model
+
+MARS_predictions <- predict(MARS_model, test_df)
+
+results <- data.frame(t(postResample(pred = MARS_predictions, obs=test_df$Yield))) %>%
+  mutate("Model"= "MARS") %>% rbind(results)
+
+ggplot(MARS_model, highlight = TRUE) + 
+  labs(title = paste0("Tuning profile: ", MARS_model$modelInfo$label))
+# Variable Importance
+ggplot(varImp(MARS_model), top = 20) + 
+  labs(title = paste0("Variable importance: ", MARS_model$modelInfo$label))
+```
+
+### Random Forest Model
+
+```{r}
+#10 folds repeat 3 times
+control <- trainControl(method='repeatedcv', 
+                        number=10, 
+                        repeats=3)
+#Metric compare model is Accuracy
+metric <- "Accuracy"
+set.seed(123)
+#Number randomely variable selected is mtry
+mtry <- sqrt(ncol(trainingData$x))
+tunegrid <- expand.grid(.mtry=c(1:10))
+rf_default <- train(Yield ~ ., data = train_df,
+                      method='rf', 
+                      metric='RMSE', 
+                      tuneGrid=tunegrid, 
+                      trControl=control)
+rf_default
+
+RF_predictions <- predict(rf_default, test_df)
+
+results <- data.frame(t(postResample(pred = RF_predictions, obs=test_df$Yield))) %>%
+  mutate("Model"= "RF") %>% rbind(results)
+
+
+ggplot(knn_model, highlight = TRUE) + 
+  labs(title = paste0("Tuning profile: ", knn_model$modelInfo$label))
+# Variable Importance
+ggplot(varImp(knn_model), top = 20) + 
+  labs(title = paste0("Variable importance: ", knn_model$modelInfo$label))
+
+```
+
+### Neural Net Model
+
+```{r}
+nnetGrid <- expand.grid(decay = c(0, 0.01, 0.1), size = 1:10, bag = FALSE)
+prep <- c("center", "scale", "nzv")
+ctrl <- trainControl(method = "cv", number = 10)
+nnetModel <- train(Yield ~ ., data = train_df,
+                   preProcess = prep, 
+                   trControl = ctrl, 
+                   method = "avNNet", 
+                   linout = TRUE, trace = FALSE, 
+                   tuneGrid = nnetGrid)
+nnetModel
+
+NN_predictions <- predict(nnetModel, test_df)
+
+results <- data.frame(t(postResample(pred = NN_predictions, obs=test_df$Yield))) %>%
+  mutate("Model"= "Neural Net") %>% rbind(results)
+
+ggplot(nnetModel, highlight = TRUE) + 
+  labs(title = paste0("Tuning profile: ", nnetModel$modelInfo$label))
+
+```
+
+### K Nearest Neighbors
+
+```{r}
+knn_model <- train(
+  Yield ~ ., data = train_df, method = "knn",
+  center = TRUE,
+  scale = TRUE,
+  trControl = trainControl("cv", number = 10),
+  tuneLength = 25
+)
+knn_model
+
+ggplot(knnModel, highlight = TRUE) + 
+  labs(title = paste0("Tuning profile: ", knnModel$modelInfo$label))
+
+knn_predictions <- predict(knn_model, test_df)
+
+results <- data.frame(t(postResample(pred = knn_predictions, obs = test_df$Yield))) %>%
+  mutate("Model"= "KNN") %>% rbind(results)
+```
+
+
+## Results Summary
+THe Random Forest Function seemed to be the highest performing algorithm in this case
+```{r}
+results %>%
+  select(Model, RMSE, Rsquared, MAE) %>%
+  arrange(RMSE) 
+```
+
+
+## Part B
+
+**Which predictors are most important in the optimal nonlinear regression model? Do either the biological or process variables dominate the list? How do the top ten important predictors compare to the top ten predictors from the optimal linear model?**
+
+```{r}
+# Variable Importance
+ggplot(varImp(knn_model), top = 20) + 
+  labs(title = paste0("Variable importance: ", knn_model$modelInfo$label))
+
+# Variable Importance
+ggplot(varImp(nnetModel), top = 20) + 
+  labs(title = paste0("Variable importance: ", nnetModel$modelInfo$label))
+
+
+# Variable Importance
+ggplot(varImp(pls_model), top = 20) + 
+  labs(title = paste0("Variable importance: ", pls_model$modelInfo$label))
+
+# Variable Importance
+ggplot(varImp(MARS_model), top = 20) + 
+  labs(title = paste0("Variable importance: ", MARS_model$modelInfo$label))
+
+```
+
+## Part C
+
+**Explore the relationships between the top predictors and the response for the predictors that are unique to the optimal nonlinear regression model. Do these plots reveal intuition about the biological or process predictors and their relationship with yield?**
+
+The variables below all represent features that are strongly correlated with the target variable and they all showed up relatively high in variable importance for the different algorithms
+```{r}
+ggplot(train_df, aes(BiologicalMaterial12, Yield)) +
+  geom_point()
+
+ggplot(train_df, aes(BiologicalMaterial06, Yield)) +
+  geom_point()
+
+ggplot(train_df, aes(BiologicalMaterial03, Yield)) +
+  geom_point()
+
+ggplot(train_df, aes(ManufacturingProcess13, Yield)) +
+  geom_point()
+
+ggplot(train_df, aes(ManufacturingProcess17, Yield)) +
+  geom_point()
+
+
+ggplot(train_df, aes(ManufacturingProcess32, Yield)) +
+  geom_point()
+
+
+
+```
+
+
